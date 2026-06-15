@@ -1,0 +1,285 @@
+Insecure Ecommerce Lab User Manual
+==================================
+
+This guide is for the local coursework lab only.
+
+Base URL:
+http://127.0.0.1:8000
+
+Seed accounts:
+alice@example.com / password123
+bob@example.com / password123
+
+
+1. SQL Injection Login Bypass
+-----------------------------
+
+Vulnerability:
+SQL Injection / Authentication Bypass
+
+Page:
+/login
+
+Input:
+Email: ' OR 1=1 #
+Password: anything
+
+Expected output:
+Login succeeds and redirects to /transactions.
+
+Why:
+The # character comments out the password check in MySQL.
+
+
+2. Weak Password Hashing
+------------------------
+
+Vulnerability:
+Weak password handling using MD5
+
+Step:
+Open app/Http/Controllers/AuthController.php
+
+Find:
+$password = md5($request->input('password'));
+
+Expected evidence:
+Passwords are hashed with MD5 instead of Laravel Hash::make().
+
+Impact:
+If the database is leaked, MD5 hashes can be cracked quickly.
+
+
+3. Missing Input Validation
+---------------------------
+
+Vulnerability:
+Input validation flaw
+
+Page:
+/register
+
+Input:
+Name: Test
+Email: not-an-email
+Password: 1
+
+Expected output:
+The app accepts the registration or attempts to store invalid data.
+
+Impact:
+Invalid emails, weak passwords, and unsafe input can enter the database.
+
+
+4. Stored XSS Through Registered Name
+-------------------------------------
+
+Vulnerability:
+Stored Cross-Site Scripting / XSS
+
+Page:
+/register
+
+Input:
+Name: <script>alert(1)</script>
+Email: xssname@example.com
+Password: password123
+
+Then log in:
+Email: xssname@example.com
+Password: password123
+
+Expected output:
+An alert box appears on /transactions.
+
+Evidence code:
+{!! session('insecure_user_name') !!}
+
+Impact:
+Malicious JavaScript can run in another user's browser.
+
+
+5. Stored XSS Through Transaction Note
+--------------------------------------
+
+Vulnerability:
+Stored XSS / Unsafe output rendering
+
+Page:
+/transactions
+
+Input:
+Product: Keyboard
+Quantity: 1
+Shipping address: Test address
+Note: <script>alert(1)</script>
+
+Click:
+Create transaction
+
+Expected output:
+An alert box appears when the transaction list loads.
+
+Evidence code:
+{!! $transaction->note !!}
+
+
+6. Session Fixation
+-------------------
+
+Vulnerability:
+Session fixation / unsafe session initialization
+
+Page:
+/login?sid=fixedsession1234567890
+
+Input:
+Email: alice@example.com
+Password: password123
+
+Expected output:
+Login succeeds and redirects to /transactions.
+
+Evidence code:
+session()->setId($request->input('sid'));
+
+Also note:
+The login method does not regenerate the session after login.
+
+Impact:
+The app accepts a session ID from the URL and does not regenerate it after login.
+
+
+7. Client-Side Price Manipulation
+---------------------------------
+
+Vulnerability:
+Client-side state manipulation
+
+Page:
+/transactions
+
+Step:
+Open browser DevTools and inspect the transaction form.
+
+Find:
+<input type="hidden" name="price" value="19.90">
+
+Change value to:
+0.01
+
+Submit the form.
+
+Expected output:
+A new transaction appears with total RM 0.01.
+
+Impact:
+The server trusts the price sent by the browser.
+
+
+8. Client-Side User ID Manipulation
+-----------------------------------
+
+Vulnerability:
+Client-side state manipulation / broken access control
+
+Log in as Alice:
+alice@example.com
+password123
+
+Page:
+/transactions
+
+Inspect hidden field:
+<input type="hidden" name="user_id" value="1">
+
+Change it to:
+2
+
+Submit a transaction.
+
+Then open:
+/transactions?user_id=2
+
+Expected output:
+The new transaction appears under user_id 2.
+
+Impact:
+The app trusts user_id from the client instead of using the logged-in session user.
+
+
+9. View Another User's Transactions
+-----------------------------------
+
+Vulnerability:
+IDOR / Broken access control
+
+Log in as Alice:
+alice@example.com
+password123
+
+Open:
+/transactions?user_id=2
+
+Expected output:
+Bob's transaction appears, for example USB-C Charger.
+
+Impact:
+Alice can view Bob's transaction data by changing the user_id parameter.
+
+
+10. Update Another User's Transaction
+-------------------------------------
+
+Vulnerability:
+Authorization bypass / broken access control
+
+Log in as Alice:
+alice@example.com
+password123
+
+Open:
+/transactions?user_id=2
+
+Find Bob's transaction.
+
+Change status to:
+cancelled
+
+Click:
+Save
+
+Expected output:
+Bob's transaction status changes to cancelled.
+
+Impact:
+Any logged-in user can update any transaction by ID.
+
+
+11. SQL Injection in Transaction Module
+---------------------------------------
+
+Vulnerability:
+SQL Injection in transaction creation
+
+Page:
+/transactions
+
+Example input:
+Product: Test Product
+Quantity: 1
+Shipping address: Test Address
+Note: Test note
+
+Evidence code:
+DB::statement(
+    "INSERT INTO insecure_transactions ... VALUES ($userId, '$productName', $price, $quantity, '$shippingAddress', '$note', ...)"
+);
+
+Expected finding:
+The transaction module builds SQL queries by directly joining user input into the SQL string.
+
+Impact:
+An attacker could manipulate SQL logic because the app does not use prepared statements or Eloquent safely.
+
+For the report, this item can be explained as a theoretical exploit using the code snippet as evidence.
