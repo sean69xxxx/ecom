@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
@@ -14,54 +16,58 @@ class AuthController extends Controller
 
     public function register(Request $request)
     {
-        // LAB ONLY: intentionally missing validation and using weak password handling.
-        $name = $request->input('name');
-        $email = $request->input('email');
-        $password = md5($request->input('password'));
+        // 1. Input Validation: Enforce strict rules and data types 
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|string|email|max:255|unique:users',
+            'password' => 'required|string|min:8', 
+        ]);
 
-        DB::statement(
-            "INSERT INTO users (name, email, password) VALUES ('$name', '$email', '$password')"
-        );
+        // 2. Prevent SQL Injection & Weak Hashing: Use Eloquent and bcrypt
+        User::create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => Hash::make($validated['password']), // Securely hashes password
+        ]);
 
-        return redirect('/login')->with('message', 'Registered. You can now log in.');
+        return redirect('/login')->with('message', 'Registered securely. You can now log in.');
     }
 
-    public function showLogin(Request $request)
+    public function showLogin()
     {
-        // LAB ONLY: accepts a session id from the URL, demonstrating session fixation risk.
-        if ($request->filled('sid')) {
-            session()->setId($request->input('sid'));
-        }
-
+        // Removed the session fixation vulnerability entirely
         return view('lab.auth.login');
     }
 
     public function login(Request $request)
     {
-        // LAB ONLY: SQL injection vulnerability from string concatenation.
-        $email = $request->input('email');
-        $password = md5($request->input('password'));
-
-        $users = DB::select(
-            "SELECT * FROM users WHERE email = '$email' AND password = '$password' LIMIT 1"
-        );
-
-        if (count($users) === 0) {
-            return back()->with('error', 'Invalid login.');
-        }
-
-        // LAB ONLY: no session regeneration after login.
-        session([
-            'insecure_user_id' => $users[0]->id,
-            'insecure_user_name' => $users[0]->name,
+        // 1. Input Validation 
+        $credentials = $request->validate([
+            'email' => 'required|email',
+            'password' => 'required',
         ]);
 
-        return redirect('/transactions');
+        // 2. Secure Authentication
+        if (Auth::attempt($credentials)) {
+            // 3. Secure Session Management: Regenerate ID to prevent session fixation 
+            $request->session()->regenerate();
+
+            return redirect()->intended('/transactions');
+        }
+
+        // 4. Proper Error Handling: Generic message to limit information disclosure 
+        return back()->withErrors([
+            'email' => 'The provided credentials do not match our records.',
+        ])->onlyInput('email');
     }
 
-    public function logout()
+    public function logout(Request $request)
     {
-        session()->forget(['insecure_user_id', 'insecure_user_name']);
+        Auth::logout();
+
+        // 5. Secure Session Management: Invalidate and regenerate CSRF token 
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
 
         return redirect('/login');
     }

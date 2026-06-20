@@ -24,10 +24,18 @@
 <main>
     <nav>
         <strong>Ecommerce System</strong>
-        <a href="/register">Register</a>
-        <a href="/login">Login</a>
-        <a href="/transactions">Transactions</a>
-        <a href="/logout">Logout</a>
+        @guest
+            <a href="/register">Register</a>
+            <a href="/login">Login</a>
+        @endguest
+
+        @auth
+            <a href="/transactions">Transactions</a>
+            <form method="post" action="/logout" style="display:inline;">
+                @csrf
+                <button type="submit" style="margin: 0; padding: 0; background: none; color: #0b5cad; text-decoration: underline; cursor: pointer; border: none; font-size: 16px;">Logout</button>
+            </form>
+        @endauth
     </nav>
 
     @if (session('message'))

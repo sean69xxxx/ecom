@@ -21,7 +21,7 @@ Page:
 /login
 
 Input:
-Email: ' OR 1=1 #
+Email: ' OR 1=1 --
 Password: anything
 
 Expected output:

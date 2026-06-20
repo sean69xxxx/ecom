@@ -3,22 +3,23 @@
 @section('content')
 <section class="panel">
     <h1>Transactions</h1>
-    <p>Logged in as: {!! session('insecure_user_name') !!}</p>
-    <p>Viewing user_id: {!! $selectedUserId !!}</p>
+    <p>Logged in as: {{ auth()->user()->name }}</p>
 
     <form method="post" action="/transactions">
         @csrf
-        <input type="hidden" name="user_id" value="{{ session('insecure_user_id') }}">
-        <input type="hidden" name="price" value="19.90">
-
+        
         <label for="product_name">Product</label>
-        <input id="product_name" name="product_name" value="Keyboard">
+        <select id="product_name" name="product_name" required>
+            <option value="Keyboard">Keyboard (RM 19.90)</option>
+            <option value="Wireless Mouse">Wireless Mouse (RM 29.90)</option>
+            <option value="USB-C Charger">USB-C Charger (RM 49.90)</option>
+        </select>
 
         <label for="quantity">Quantity</label>
-        <input id="quantity" name="quantity" value="1">
+        <input type="number" id="quantity" name="quantity" value="1" min="1" required>
 
         <label for="shipping_address">Shipping address</label>
-        <textarea id="shipping_address" name="shipping_address">Default address</textarea>
+        <textarea id="shipping_address" name="shipping_address" required>Default address</textarea>
 
         <label for="note">Note</label>
         <textarea id="note" name="note">Gift wrap please</textarea>
@@ -28,12 +29,11 @@
 </section>
 
 <section class="panel">
-    <h2>Transaction List</h2>
+    <h2>My Transactions</h2>
     <table>
         <thead>
         <tr>
             <th>ID</th>
-            <th>User</th>
             <th>Product</th>
             <th>Total</th>
             <th>Address</th>
@@ -45,20 +45,19 @@
         <tbody>
         @foreach ($transactions as $transaction)
             <tr>
-                <td>{!! $transaction->id !!}</td>
-                <td>{!! $transaction->user_id !!}</td>
-                <td>{!! $transaction->product_name !!}</td>
-                <td>RM {!! $transaction->price * $transaction->quantity !!}</td>
-                <td>{!! $transaction->shipping_address !!}</td>
-                <td>{!! $transaction->note !!}</td>
-                <td>{!! $transaction->status !!}</td>
+                <td>{{ $transaction->id }}</td>
+                <td>{{ $transaction->product_name }}</td>
+                <td>RM {{ number_format($transaction->price * $transaction->quantity, 2) }}</td>
+                <td>{{ $transaction->shipping_address }}</td>
+                <td>{{ $transaction->note }}</td>
+                <td>{{ ucfirst($transaction->status) }}</td>
                 <td>
                     <form method="post" action="/transactions/{{ $transaction->id }}/status">
                         @csrf
                         <select name="status">
-                            <option value="pending">pending</option>
-                            <option value="paid">paid</option>
-                            <option value="cancelled">cancelled</option>
+                            <option value="pending" {{ $transaction->status == 'pending' ? 'selected' : '' }}>Pending</option>
+                            <option value="paid" {{ $transaction->status == 'paid' ? 'selected' : '' }}>Paid</option>
+                            <option value="cancelled" {{ $transaction->status == 'cancelled' ? 'selected' : '' }}>Cancelled</option>
                         </select>
                         <button type="submit">Save</button>
                     </form>

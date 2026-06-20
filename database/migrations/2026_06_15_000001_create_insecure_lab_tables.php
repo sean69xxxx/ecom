@@ -1,9 +1,11 @@
+<!--updated become secure-->
 <?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Hash; 
 
 return new class extends Migration
 {
@@ -25,39 +27,16 @@ return new class extends Migration
             [
                 'name' => 'Alice Customer',
                 'email' => 'alice@example.com',
-                'password' => md5('password123'),
+                // 2. CHANGE MD5 TO HASH::MAKE
+                'password' => Hash::make('password123'), 
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
                 'name' => 'Bob Buyer',
                 'email' => 'bob@example.com',
-                'password' => md5('password123'),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-        ]);
-
-        DB::table('transactions')->insert([
-            [
-                'user_id' => 1,
-                'product_name' => 'Wireless Mouse',
-                'price' => 29.90,
-                'quantity' => 1,
-                'shipping_address' => '12 Lab Street',
-                'note' => 'Leave at door',
-                'status' => 'pending',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'user_id' => 2,
-                'product_name' => 'USB-C Charger',
-                'price' => 49.90,
-                'quantity' => 2,
-                'shipping_address' => '88 Demo Avenue',
-                'note' => 'Office delivery',
-                'status' => 'paid',
+                // 2. CHANGE MD5 TO HASH::MAKE
+                'password' => Hash::make('password123'), 
                 'created_at' => now(),
                 'updated_at' => now(),
             ],

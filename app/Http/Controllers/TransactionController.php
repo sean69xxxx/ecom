@@ -3,19 +3,26 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class TransactionController extends Controller
 {
-    public function index(Request $request)
+    public function index()
     {
-        if (! session('insecure_user_id')) {
+        // Use Laravel's built-in Auth check
+        if (!Auth::check()) {
             return redirect('/login')->with('error', 'Please log in first.');
         }
 
-        // LAB ONLY: user_id can be changed in the URL to view another user's transactions.
-        $userId = $request->input('user_id', session('insecure_user_id'));
-        $transactions = DB::select("SELECT * FROM transactions WHERE user_id = $userId ORDER BY id DESC");
+        // 1. Fix IDOR & Authorization: Strictly use the authenticated user's ID
+        $userId = Auth::id();
+
+        // 2. Prevent SQL Injection: Use Query Builder
+        $transactions = DB::table('transactions')
+            ->where('user_id', $userId)
+            ->orderBy('id', 'desc')
+            ->get();
 
         return view('lab.transactions.index', [
             'transactions' => $transactions,
@@ -25,36 +32,81 @@ class TransactionController extends Controller
 
     public function store(Request $request)
     {
-        if (! session('insecure_user_id')) {
+        if (!Auth::check()) {
             return redirect('/login')->with('error', 'Please log in first.');
         }
 
-        // LAB ONLY: trusts client-side user_id, price, and quantity values.
-        $userId = $request->input('user_id');
-        $productName = $request->input('product_name');
-        $price = $request->input('price');
-        $quantity = $request->input('quantity');
-        $shippingAddress = $request->input('shipping_address');
-        $note = $request->input('note');
+        // 1. Input Validation: Notice we COMPLETELY REMOVED the 'price' validation.
+        // We do not care what price the client sends, so we don't even check it.
+        $validated = $request->validate([
+            'product_name' => 'required|string|max:255',
+            'quantity' => 'required|integer|min:1|max:100',
+            'shipping_address' => 'required|string|max:500',
+            'note' => 'nullable|string|max:500',
+        ]);
 
-        DB::statement(
-            "INSERT INTO transactions (user_id, product_name, price, quantity, shipping_address, note, status, created_at, updated_at)
-             VALUES ($userId, '$productName', $price, $quantity, '$shippingAddress', '$note', 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
-        );
+        // 2. SERVER-SIDE PRICE LOOKUP (The Real Fix)
+        // In a real app, you would fetch this from a Products database table.
+        $officialPrices = [
+            'Keyboard' => 19.90,
+            'Wireless Mouse' => 29.90,
+            'USB-C Charger' => 49.90,
+        ];
 
-        return redirect('/transactions')->with('message', 'Transaction created.');
+        // Ensure the product exists in our system to prevent manipulation
+        if (!array_key_exists($validated['product_name'], $officialPrices)) {
+            return back()->with('error', 'Invalid product selected.');
+        }
+
+        // Securely fetch the official price from the server, NOT the request
+        $securePrice = $officialPrices[$validated['product_name']];
+
+        // 3. Insert using the secure server-side price
+        DB::table('transactions')->insert([
+            'user_id' => Auth::id(), 
+            'product_name' => strip_tags($validated['product_name']),
+            'price' => $securePrice, // <-- Safe!
+            'quantity' => $validated['quantity'],
+            'shipping_address' => strip_tags($validated['shipping_address']),
+            'note' => strip_tags($validated['note']),
+            'status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return redirect('/transactions')->with('message', 'Transaction created securely.');
     }
 
     public function updateStatus(Request $request, int $id)
     {
-        if (! session('insecure_user_id')) {
+        if (!Auth::check()) {
             return redirect('/login')->with('error', 'Please log in first.');
         }
 
-        // LAB ONLY: any logged-in user can update any transaction status by id.
-        $status = $request->input('status');
-        DB::statement("UPDATE transactions SET status = '$status', updated_at = CURRENT_TIMESTAMP WHERE id = $id");
+        // 1. Input Validation: Restrict allowed status values 
+        $validated = $request->validate([
+            'status' => 'required|string|in:pending,processing,shipped,delivered,cancelled',
+        ]);
 
-        return redirect('/transactions')->with('message', 'Status updated.');
+        // 2. Access Control: Ensure the transaction actually belongs to the logged-in user [cite: 70]
+        $transaction = DB::table('transactions')
+            ->where('id', $id)
+            ->where('user_id', Auth::id())
+            ->first();
+
+        if (!$transaction) {
+            // 3. Proper Error Handling: Generic failure 
+            return redirect('/transactions')->with('error', 'Transaction not found or unauthorized.');
+        }
+
+        // 4. Parameterized Update
+        DB::table('transactions')
+            ->where('id', $id)
+            ->update([
+                'status' => $validated['status'],
+                'updated_at' => now(),
+            ]);
+
+        return redirect('/transactions')->with('message', 'Status updated successfully.');
     }
 }
